@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: autofix-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://autofix:password@postgres:5432/autofix
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+  
+  worker:
+    build: .
+    container_name: autofix-worker
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://autofix:password@postgres:5432/autofix
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    command: python -m src.worker
+  
+  redis:
+    image: redis:7-alpine
+    container_name: autofix-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+  
+  postgres:
+    image: postgres:15-alpine
+    container_name: autofix-postgres
+    environment:
+      - POSTGRES_DB=autofix
+      - POSTGRES_USER=autofix
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  redis_data:
+  postgres_data:
+
+# Made with Bob
