@@ -24,6 +24,9 @@ psycopg2-binary==2.9.9
 httpx==0.25.2
 requests==2.31.0
 
+# Multipart Uploads
+python-multipart==0.0.6
+
 # Utilities
 python-dotenv==1.0.0
 pyyaml==6.0.1

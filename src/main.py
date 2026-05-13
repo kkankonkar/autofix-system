@@ -3,14 +3,19 @@ AutoFix System - Main Application
 A simplified MVP that demonstrates the core functionality.
 """
 
+from datetime import datetime
+import os
+import uuid
+from pathlib import Path
+from typing import Any, Optional
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from typing import Optional
-from datetime import datetime
-import uuid
-import os
 
 from src.ai_agent import HybridAgent
+from src.fix_generator import FixGenerator
+from src.pr_creator import PRCreator
+from src.repo_manager import RepoManager
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -22,6 +27,8 @@ app = FastAPI(
 # Simple in-memory storage for MVP
 logs_db = {}
 analyses_db = {}
+fixes_db = {}
+pull_requests_db = {}
 
 
 class LogSubmission(BaseModel):
@@ -54,6 +61,8 @@ async def root():
         "endpoints": {
             "submit_log": "POST /api/v1/logs/ingest",
             "get_analysis": "GET /api/v1/analysis/{log_id}",
+            "get_fix": "POST /api/v1/fix/{log_id}",
+            "create_pr": "POST /api/v1/pr/create/{log_id}",
             "health": "GET /health"
         }
     }
@@ -66,7 +75,9 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "logs_processed": len(logs_db),
-        "analyses_completed": len(analyses_db)
+        "analyses_completed": len(analyses_db),
+        "fixes_generated": len(fixes_db),
+        "pull_requests_created": len(pull_requests_db),
     }
 
 
@@ -113,10 +124,10 @@ async def ingest_log(
 @app.get("/api/v1/analysis/{log_id}")
 async def get_analysis(log_id: str):
     """Get analysis for a log entry."""
-    
+
     if log_id not in analyses_db:
         raise HTTPException(status_code=404, detail="Analysis not found")
-    
+
     return analyses_db[log_id]
 
 
@@ -215,65 +226,428 @@ async def analyze_error_mvp(log: LogSubmission) -> dict:
 async def generate_fix(log_id: str):
     """
     Generate a fix for an analyzed error.
-    
-    MVP version returns a template fix.
-    Production version would use AI to generate actual fixes.
     """
     if log_id not in analyses_db:
         raise HTTPException(status_code=404, detail="Analysis not found")
-    
+
     analysis = analyses_db[log_id]
     log = logs_db[log_id]
-    
+
     if not analysis["fixable"]:
         raise HTTPException(status_code=400, detail="Error is not automatically fixable")
-    
-    # Generate template fix based on error type
-    fix = generate_template_fix(analysis["error_type"], log)
-    
+
+    code_context = build_code_context(log, analysis)
+    generator = FixGenerator()
+
+    try:
+        fix = await generator.generate_fix(
+            analysis_id=log_id,
+            error_analysis=analysis,
+            code_context=code_context,
+        )
+        fix_payload = fix.dict()
+    except Exception:
+        fix_payload = generate_template_fix(analysis["error_type"], log)
+
+    fixes_db[log_id] = {
+        "log_id": log_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "fix": fix_payload,
+    }
+
     return {
         "log_id": log_id,
         "fix_generated": True,
-        "fix": fix,
+        "fix": fix_payload,
+        "detected_file_path": fix_payload.get("file_path", "Not detected"),
         "next_steps": [
             "Review the proposed fix",
-            "Test in development environment",
-            "Create pull request manually or use /api/v1/pr/create endpoint"
+            f"Target file: {fix_payload.get('file_path', 'Not detected')}",
+            "Create pull request automatically using POST /api/v1/pr/create/{log_id}",
         ]
     }
 
 
-def generate_template_fix(error_type: str, log: dict) -> dict:
-    """Generate a template fix based on error type."""
+@app.post("/api/v1/pr/create/{log_id}")
+async def create_pull_request_for_fix(
+    log_id: str,
+    target_file_path: Optional[str] = Form(None),
+    base_branch: str = Form("main"),
+):
+    """Generate a fix, apply it to a repository, and open a GitHub pull request.
     
+    If target_file_path is not provided, it will be auto-detected from the error analysis.
+    """
+    if log_id not in logs_db:
+        raise HTTPException(status_code=404, detail="Log not found")
+
+    if log_id not in analyses_db:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    log = logs_db[log_id]
+    analysis = analyses_db[log_id]
+
+    if not log.get("repository_url"):
+        raise HTTPException(status_code=400, detail="repository_url is required to create a PR")
+
+    if not analysis.get("fixable"):
+        raise HTTPException(status_code=400, detail="Analysis is not marked as fixable")
+
+    if log_id not in fixes_db:
+        await generate_fix(log_id)
+
+    fix_record = fixes_db[log_id]["fix"]
+    branch_name = f"autofix/{log_id}"
+    repo_manager = RepoManager()
+    pr_creator = PRCreator()
+
+    checkout_dir = None
+
+    try:
+        repo, checkout_dir = repo_manager.prepare_repository(
+            repository_url=log["repository_url"],
+            branch_name=branch_name,
+            base_branch=base_branch,
+        )
+
+        # Check if fix has multiple file changes
+        file_changes = fix_record.get("file_changes", [])
+        
+        if file_changes:
+            # Handle multiple file changes
+            files_modified = []
+            for change in file_changes:
+                change_file_path = change.get("file_path", "")
+                
+                # Normalize the file path
+                normalized_path = repo_manager.find_file_in_repo(checkout_dir, change_file_path)
+                if not normalized_path:
+                    # Try as-is if normalization fails
+                    normalized_path = change_file_path
+                
+                change_original = change.get("original_code", "")
+                change_fixed = change.get("fixed_code", "")
+                
+                if not change_fixed.strip():
+                    continue
+                
+                try:
+                    if change_original.strip():
+                        # Try to replace specific code snippet
+                        repo_manager.replace_code_snippet(
+                            checkout_dir=checkout_dir,
+                            file_path=normalized_path,
+                            original_code=change_original,
+                            fixed_code=change_fixed,
+                        )
+                    else:
+                        # Check if we have line number information
+                        line_number = change.get("line_number") or analysis.get("line_number")
+                        if line_number and (checkout_dir / normalized_path).exists():
+                            # Use line-based replacement (safer - preserves rest of file)
+                            # Estimate end line (assume fix is ~10 lines)
+                            end_line = line_number + 10
+                            repo_manager.replace_lines_in_file(
+                                checkout_dir=checkout_dir,
+                                file_path=normalized_path,
+                                start_line=line_number,
+                                end_line=end_line,
+                                fixed_code=change_fixed,
+                            )
+                        else:
+                            # New file - write entire content
+                            repo_manager.write_file(checkout_dir, normalized_path, change_fixed)
+                except ValueError as e:
+                    # If snippet not found, try line-based replacement if we have line numbers
+                    if "not found in target file" in str(e):
+                        line_number = change.get("line_number") or analysis.get("line_number")
+                        if line_number:
+                            # Use line-based replacement as fallback
+                            end_line = line_number + 10  # Estimate
+                            try:
+                                repo_manager.replace_lines_in_file(
+                                    checkout_dir=checkout_dir,
+                                    file_path=normalized_path,
+                                    start_line=line_number,
+                                    end_line=end_line,
+                                    fixed_code=change_fixed,
+                                )
+                            except ValueError:
+                                # Last resort: skip this change and log warning
+                                print(f"Warning: Could not apply fix to {normalized_path}: {e}")
+                                continue
+                        else:
+                            # No line number info - cannot safely apply fix
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Cannot apply fix to {normalized_path}: original code not found and no line number provided"
+                            )
+                    else:
+                        raise
+                
+                files_modified.append(normalized_path)
+            
+            if not files_modified:
+                raise HTTPException(status_code=400, detail="No valid file changes found in fix")
+            
+            target_file_path = ", ".join(files_modified)
+        else:
+            # Handle single file change (backward compatibility)
+            # Auto-detect target file path if not provided
+            if not target_file_path:
+                detected_path = auto_detect_target_file_path(analysis, fix_record, checkout_dir)
+                if not detected_path:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Could not auto-detect target file path. Please provide target_file_path explicitly."
+                    )
+                target_file_path = detected_path
+            
+            # Normalize the file path
+            normalized_path = repo_manager.find_file_in_repo(checkout_dir, target_file_path)
+            if normalized_path:
+                target_file_path = normalized_path
+
+            fixed_code = extract_fixed_code(fix_record)
+            if not fixed_code.strip():
+                raise HTTPException(status_code=400, detail="Generated fix does not contain fixed_code")
+
+            original_code = extract_original_code(fix_record)
+            try:
+                if original_code.strip():
+                    # Try to replace specific code snippet
+                    repo_manager.replace_code_snippet(
+                        checkout_dir=checkout_dir,
+                        file_path=target_file_path,
+                        original_code=original_code,
+                        fixed_code=fixed_code,
+                    )
+                else:
+                    # Check if we have line number information
+                    line_number = analysis.get("line_number")
+                    if line_number and (checkout_dir / target_file_path).exists():
+                        # Use line-based replacement (safer - preserves rest of file)
+                        end_line = line_number + 10  # Estimate
+                        repo_manager.replace_lines_in_file(
+                            checkout_dir=checkout_dir,
+                            file_path=target_file_path,
+                            start_line=line_number,
+                            end_line=end_line,
+                            fixed_code=fixed_code,
+                        )
+                    else:
+                        # New file - write entire content
+                        repo_manager.write_file(checkout_dir, target_file_path, fixed_code)
+            except ValueError as e:
+                # If snippet not found, try line-based replacement if we have line numbers
+                if "not found in target file" in str(e):
+                    line_number = analysis.get("line_number")
+                    if line_number:
+                        # Use line-based replacement as fallback
+                        end_line = line_number + 10  # Estimate
+                        try:
+                            repo_manager.replace_lines_in_file(
+                                checkout_dir=checkout_dir,
+                                file_path=target_file_path,
+                                start_line=line_number,
+                                end_line=end_line,
+                                fixed_code=fixed_code,
+                            )
+                        except ValueError:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Cannot apply fix: original code not found and line-based replacement failed"
+                            )
+                    else:
+                        # No line number info - cannot safely apply fix
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Cannot apply fix: original code not found and no line number provided"
+                        )
+                else:
+                    raise
+
+        commit_message = extract_commit_message(fix_record, log_id)
+        repo_manager.commit_and_push(repo, branch_name, commit_message)
+
+        pr_title = commit_message
+        pr_body = extract_pr_description(fix_record, analysis, log)
+        created_pr = pr_creator.create_pull_request(
+            repository_url=log["repository_url"],
+            branch_name=branch_name,
+            title=pr_title,
+            body=pr_body,
+            base_branch=base_branch,
+            fix_proposal_id=log_id,
+        )
+
+        pr_payload = created_pr.dict()
+        pull_requests_db[log_id] = pr_payload
+
+        return {
+            "status": "success",
+            "log_id": log_id,
+            "branch_name": branch_name,
+            "target_file_path": target_file_path,
+            "pull_request": pr_payload,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to create pull request: {exc}") from exc
+    finally:
+        if checkout_dir is not None:
+            repo_manager.cleanup(checkout_dir)
+
+
+def build_code_context(log: dict[str, Any], analysis: dict[str, Any]) -> str:
+    """Build context for fix generation."""
+    return (
+        f"Repository: {log.get('repository_url', 'unknown')}\n"
+        f"Application: {log.get('application', 'unknown')}\n"
+        f"Filename: {log.get('filename', 'N/A')}\n"
+        f"Detected file path: {analysis.get('file_path', 'unknown')}\n"
+        f"Detected line number: {analysis.get('line_number', 0)}\n"
+        f"Function name: {analysis.get('function_name', 'unknown')}\n"
+        f"Root cause: {analysis.get('analysis', analysis.get('root_cause', 'unknown'))}\n"
+        f"Stack trace:\n{log.get('stack_trace', 'N/A')}\n\n"
+        f"Full log:\n{log.get('raw_log', log.get('message', ''))}"
+    )
+
+
+def extract_fixed_code(fix_record: dict[str, Any]) -> str:
+    """Normalize fixed code from either structured or template fix output."""
+    return fix_record.get("fixed_code") or fix_record.get("code_template") or ""
+
+
+def extract_original_code(fix_record: dict[str, Any]) -> str:
+    """Extract original code for surgical snippet replacement."""
+    return fix_record.get("original_code") or ""
+
+
+def extract_commit_message(fix_record: dict[str, Any], log_id: str) -> str:
+    """Normalize commit message from fix output."""
+    return fix_record.get("commit_message") or f"Fix issue detected from {log_id}"
+
+
+def extract_pr_description(fix_record: dict[str, Any], analysis: dict[str, Any], log: dict[str, Any]) -> str:
+    """Normalize PR description from fix output."""
+    return (
+        fix_record.get("pr_description")
+        or f"## Automated Fix\n\n"
+        f"- Repository: {log.get('repository_url', 'unknown')}\n"
+        f"- Error type: {analysis.get('error_type', 'UnknownError')}\n"
+        f"- Analysis: {analysis.get('analysis', 'No analysis available')}\n"
+        f"- Explanation: {fix_record.get('explanation', 'No explanation provided')}"
+    )
+
+
+def generate_template_fix(error_type: str, log: dict[str, Any]) -> dict[str, Any]:
+    """Generate a template fix based on error type."""
+
     fixes = {
         "TypeError": {
             "description": "Add type checking and null safety",
-            "code_template": "if (variable && typeof variable === 'expected_type') {\n  // safe to use variable\n}",
-            "explanation": "Add defensive checks before accessing properties or methods"
+            "original_code": log.get("raw_log", ""),
+            "fixed_code": "if (variable && typeof variable === 'expected_type') {\n  // safe to use variable\n}",
+            "explanation": "Add defensive checks before accessing properties or methods",
+            "commit_message": "Fix: add type checking and null safety",
+            "pr_description": "## Problem\nDetected a TypeError from uploaded logs.\n\n## Solution\nAdded defensive type checks and null safety.",
+            "test_suggestions": ["Test with undefined values", "Test with expected input types"],
         },
         "NullPointerException": {
             "description": "Add null/undefined checks",
-            "code_template": "if (object != null) {\n  // safe to access object\n}",
-            "explanation": "Check for null/undefined before accessing object properties"
+            "original_code": log.get("raw_log", ""),
+            "fixed_code": "if (object != null) {\n  // safe to access object\n}",
+            "explanation": "Check for null/undefined before accessing object properties",
+            "commit_message": "Fix: guard against null object access",
+            "pr_description": "## Problem\nDetected null object access.\n\n## Solution\nAdded null checks before property access.",
+            "test_suggestions": ["Test with null object", "Test with initialized object"],
         },
         "SyntaxError": {
             "description": "Fix syntax issues",
-            "code_template": "// Review and fix syntax according to language rules",
-            "explanation": "Syntax errors require manual review of the code"
+            "original_code": log.get("raw_log", ""),
+            "fixed_code": "// Review and fix syntax according to language rules",
+            "explanation": "Syntax errors require manual review of the code",
+            "commit_message": "Fix: adjust syntax based on log analysis",
+            "pr_description": "## Problem\nDetected syntax-related issue.\n\n## Solution\nPrepared a manual syntax-fix placeholder for review.",
+            "test_suggestions": ["Run linter", "Run unit tests"],
         },
         "ReferenceError": {
             "description": "Define missing variables/functions",
-            "code_template": "// Ensure variable is declared before use\nconst variable = defaultValue;",
-            "explanation": "Declare variables before using them"
+            "original_code": log.get("raw_log", ""),
+            "fixed_code": "// Ensure variable is declared before use\nconst variable = defaultValue;",
+            "explanation": "Declare variables before using them",
+            "commit_message": "Fix: declare missing reference before use",
+            "pr_description": "## Problem\nDetected missing variable or function reference.\n\n## Solution\nAdded declaration placeholder before usage.",
+            "test_suggestions": ["Run affected code path", "Add regression test for missing reference"],
         }
     }
-    
+
     return fixes.get(error_type, {
         "description": "Manual review required",
-        "code_template": "// Error type not recognized",
-        "explanation": "This error requires manual investigation"
+        "original_code": log.get("raw_log", ""),
+        "fixed_code": "// Error type not recognized",
+        "explanation": "This error requires manual investigation",
+        "commit_message": "Fix: investigate unknown error from logs",
+        "pr_description": "## Problem\nUnknown error detected from uploaded logs.\n\n## Solution\nManual investigation required.",
+        "test_suggestions": ["Review logs manually"],
     })
+
+
+def auto_detect_target_file_path(analysis: dict, fix_record: dict, checkout_dir: Path) -> Optional[str]:
+    """Auto-detect the target file path from analysis or fix record.
+    
+    Priority:
+    1. file_path from fix_record (stored during fix generation)
+    2. file_path from analysis (detected by AI during analysis)
+    3. Search for file in repository based on error context
+    """
+    # Try to get from fix record first (most reliable as it was validated during fix generation)
+    file_path = fix_record.get("file_path")
+    if file_path and _validate_file_exists(checkout_dir, file_path):
+        return file_path
+    
+    # Try to get from analysis
+    file_path = analysis.get("file_path")
+    if file_path and _validate_file_exists(checkout_dir, file_path):
+        return file_path
+    
+    # Try to extract from stack trace or error message
+    stack_trace = analysis.get("stack_trace", "")
+    if stack_trace:
+        # Look for common file path patterns in stack traces
+        import re
+        # Pattern for file paths like "at /path/to/file.py:123" or "File 'path/to/file.js', line 45"
+        patterns = [
+            r'File ["\']([^"\']+)["\']',  # Python style
+            r'at ([^\s:]+):\d+',  # JavaScript/TypeScript style
+            r'in ([^\s]+):\d+',  # Generic style
+            r'([a-zA-Z0-9_/.-]+\.(py|js|ts|java|go|rb|php|cpp|c|h)):\d+',  # Generic file.ext:line
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, stack_trace)
+            for match in matches:
+                # Extract just the file path (match might be a tuple)
+                potential_path = match[0] if isinstance(match, tuple) else match
+                
+                # Clean up the path (remove leading slashes, make relative)
+                potential_path = potential_path.lstrip('/')
+                
+                if _validate_file_exists(checkout_dir, potential_path):
+                    return potential_path
+    
+    return None
+
+
+def _validate_file_exists(checkout_dir: Path, file_path: str) -> bool:
+    """Check if a file exists in the repository checkout."""
+    try:
+        target_path = checkout_dir / file_path
+        return target_path.exists() and target_path.is_file()
+    except Exception:
+        return False
 
 
 # Startup event
@@ -294,6 +668,7 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         app,
         host="0.0.0.0",
