@@ -19,7 +19,7 @@ class BobAgent(AIAgent):
     async def _run_bob(self, prompt: str) -> str:
         """Execute Bob CLI with a non-interactive prompt."""
         result = subprocess.run(
-            [self.bob_command, "-p", prompt, "--mode", self.bob_mode, "--yolo"],
+            [self.bob_command, "-p", prompt, "--chat-mode", self.bob_mode, "--yolo"],
             capture_output=True,
             text=True,
             timeout=self.timeout_seconds,
