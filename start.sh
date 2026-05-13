@@ -20,7 +20,7 @@ source venv/bin/activate
 # Install runtime dependencies needed for the MVP only
 echo "📥 Installing MVP runtime dependencies..."
 pip install -q --upgrade pip
-pip install -q fastapi "uvicorn[standard]" pydantic pydantic-settings python-dotenv openai requests python-multipart
+pip install -q fastapi "uvicorn[standard]" pydantic pydantic-settings python-dotenv openai requests python-multipart PyGithub GitPython
 
 # Validate Bob CLI availability when configured as primary agent
 if [ "${AI_AGENT_PRIMARY:-bob_cli}" = "bob_cli" ]; then
