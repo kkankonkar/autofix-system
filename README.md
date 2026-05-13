@@ -1,50 +1,42 @@
-# AutoFix System - Automated Code Fix with Bob AI Agent
+# AutoFix System - Automated Code Fix with AI
 
-An intelligent system that automatically analyzes application logs, identifies code errors, generates fixes using Bob AI agent, and creates pull requests in GitHub repositories.
+An intelligent system that automatically analyzes application logs, identifies code errors, generates fixes using AI (Bob CLI or OpenAI), and creates pull requests in GitHub repositories.
 
 ## 🎯 Features
 
-- **Automated Log Monitoring** - Ingests logs from multiple applications
-- **AI-Powered Analysis** - Uses Bob CLI as the primary execution path to analyze errors
-- **Smart Fix Generation** - Generates context-aware code fixes through Bob CLI workflows
+- **Automated Log Analysis** - Upload log files and get instant error analysis
+- **AI-Powered Fix Generation** - Uses Bob CLI (primary) or OpenAI (fallback) to generate fixes
+- **Path Normalization** - Handles absolute paths from containers (e.g., `/app/file.py` → `src/file.py`)
+- **Multi-File Fixes** - Supports fixing multiple files in a single PR
+- **Safe Code Replacement** - Line-based replacement preserves unrelated code
 - **Automatic PR Creation** - Creates pull requests with detailed explanations
 - **Generic Design** - Works with any application and GitHub repository
-- **Scalable Architecture** - Queue-based processing for high throughput
 
 ## 🏗️ Architecture
 
 ```
-Applications → Log Ingestion → Queue → Error Analyzer (Bob AI)
+Log Upload → Error Analysis (AI) → Fix Generation (AI) → PR Creation
                                           ↓
-GitHub ← PR Creator ← Fix Generator ← Repo Manager
+                              Path Normalization + Multi-File Support
 ```
-
-### Components:
-
-1. **Log Ingestion Service** - Collects logs via webhook/API
-2. **Error Analyzer** - Analyzes logs using Bob AI
-3. **Repository Manager** - Clones and manages source repositories
-4. **Fix Generator** - Generates code fixes using Bob AI
-5. **PR Creator** - Creates and manages pull requests
 
 ## 📦 Project Structure
 
 ```
 autofix-system/
 ├── src/
-│   ├── ai_agent/          # Bob + OpenAI integration
-│   ├── ingestion/         # Log ingestion service
-│   ├── analyzer/          # Error analysis
-│   ├── repo_manager/      # Repository management
-│   ├── fix_generator/     # Fix generation
+│   ├── ai_agent/          # Bob CLI + OpenAI integration
+│   ├── repo_manager/      # Repository management & path normalization
+│   ├── fix_generator/     # Fix generation with multi-file support
 │   ├── pr_creator/        # PR creation
-│   ├── models/            # Data models
-│   └── utils/             # Utilities
-├── config/                # Configuration files
-├── tests/                 # Test suite
+│   ├── models/            # Data models (FixProposal, FileChange, etc.)
+│   └── main.py            # FastAPI application
 ├── docs/                  # Documentation
+│   ├── MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md
+│   ├── FILE_PATH_AUTO_DETECTION_FLOW.md
+│   └── AUTO_DETECT_FILE_PATH.md
 ├── requirements.txt       # Python dependencies
-├── docker-compose.yml     # Docker setup
+├── start.sh              # Quick start script
 └── README.md             # This file
 ```
 
@@ -52,390 +44,307 @@ autofix-system/
 
 ### Prerequisites
 
-- Python 3.10+
-- Redis (for queue)
-- PostgreSQL (for persistence)
-- GitHub App credentials
-- Bob CLI installed and available in PATH
-- OpenAI API key (optional fallback)
+- **Python 3.10+**
+- **GitHub Personal Access Token** (with repo permissions)
+- **Bob CLI** (optional, for primary AI agent)
+  - Install from: https://github.com/RooVetGit/Roo-Code
+  - Or use OpenAI as fallback
+- **OpenAI API Key** (optional, for fallback)
 
-### Installation
+### Setup
 
-1. **Clone the repository:**
-   ```bash
-   cd /Users/kalpeshkankonkar/Downloads/autofix-system
-   ```
-
-2. **Create virtual environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure environment:**
-   ```bash
-   cp config/.env.example config/.env
-   # Edit config/.env with your credentials
-   ```
-
-5. **Start services:**
-   ```bash
-   # Start Redis
-   redis-server
-
-   # Start PostgreSQL
-   # (or use Docker: docker-compose up -d postgres redis)
-
-   # Run migrations
-   alembic upgrade head
-
-   # Start the application
-   python -m src.main
-   ```
-
-## ⚙️ Configuration
-
-### Environment Variables
-
-Create `config/.env`:
+1. **Set Environment Variables:**
 
 ```bash
-# AI Configuration
-AI_AGENT_PRIMARY=bob_cli
-AI_AGENT_FALLBACK=openai
-BOB_CLI_COMMAND=bob
-BOB_MODE=ask
-OPENAI_API_KEY=your_openai_api_key
+# Required: GitHub Token
+export GITHUB_TOKEN="your_github_personal_access_token"
 
-# GitHub Configuration
-GITHUB_APP_ID=your_github_app_id
-GITHUB_PRIVATE_KEY_PATH=/path/to/private-key.pem
-GITHUB_INSTALLATION_ID=your_installation_id
+# Optional: Bob CLI (if using Bob as primary agent)
+export BOB_CLI_COMMAND="bob"  # or path to bob executable
 
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/autofix
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# Application
-LOG_LEVEL=INFO
-MAX_CONCURRENT_JOBS=5
+# Optional: OpenAI (if using as fallback or primary)
+export OPENAI_API_KEY="your_openai_api_key"
 ```
 
-### Application Configuration
-
-Create `config/applications.yaml`:
-
-```yaml
-applications:
-  - name: "my-web-app"
-    log_source:
-      type: "webhook"
-      endpoint: "/logs/my-web-app"
-    repository:
-      url: "https://github.com/org/my-web-app"
-      branch: "main"
-      auto_merge: false
-    
-  - name: "api-service"
-    log_source:
-      type: "file"
-      path: "/var/log/api-service/*.log"
-    repository:
-      url: "https://github.com/org/api-service"
-      branch: "develop"
-      auto_merge: false
-```
-
-## 📡 API Endpoints
-
-### Log Ingestion
-
-**POST** `/api/v1/logs/ingest`
-
-Submit a repository URL and an entire log file using multipart form-data:
+2. **Run the System:**
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/logs/ingest \
-  -F "repository_url=https://github.com/org/my-web-app" \
-  -F "log_file=@/absolute/path/to/application.log"
+./start.sh
 ```
 
-The server extracts:
-- repository URL from the form field
-- filename from the uploaded file
-- first non-empty log line as the summary message
-- full uploaded content for analysis context
+That's it! The system will:
+- Create a virtual environment
+- Install dependencies
+- Start the FastAPI server at http://localhost:8000
 
-### Status Check
+### API Documentation
 
-**GET** `/api/v1/status`
+Once running, visit:
+- **API Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
 
-Check system status:
+## 📡 API Usage
+
+### 1. Upload Log File
 
 ```bash
-curl http://localhost:8000/api/v1/status
+curl -X POST "http://localhost:8000/api/v1/logs/ingest" \
+  -F "repository_url=https://github.com/your-org/your-repo" \
+  -F "log_file=@/path/to/error.log"
 ```
 
-### Job Status
-
-**GET** `/api/v1/jobs/{job_id}`
-
-Check processing status:
-
-```bash
-curl http://localhost:8000/api/v1/jobs/job-123456
-```
-
-## 🤖 Bob AI Integration
-
-### Using Bob CLI (Primary)
-
-The system integrates with Bob through the installed CLI, matching the non-interactive prompt execution pattern used by review automation workflows:
-
-```python
-from src.ai_agent import BobAgent
-
-agent = BobAgent()
-analysis = await agent.analyze_error(log_entry, code_context)
-```
-
-### Using OpenAI (Fallback)
-
-If Bob is unavailable, the system automatically falls back to OpenAI:
-
-```python
-from src.ai_agent import OpenAIAgent
-
-agent = OpenAIAgent(api_key="your-key")
-analysis = await agent.analyze_error(log_entry, code_context)
-```
-
-### Hybrid Approach (Recommended)
-
-```python
-from src.ai_agent import HybridAgent
-
-agent = HybridAgent()
-# Tries Bob first, falls back to OpenAI
-analysis = await agent.analyze_error(log_entry, code_context)
-```
-
-## 🔄 Workflow
-
-### 1. Log Submission
-
-Application sends error log to ingestion endpoint:
-
-```
-POST /api/v1/logs/ingest
-```
-
-### 2. Queue Processing
-
-Log is added to Redis queue for async processing.
-
-### 3. Error Analysis
-
-Bob AI analyzes the error and extracts:
-- Error type
-- File location
-- Root cause
-- Fixability assessment
-
-### 4. Repository Preparation
-
-System clones the repository and locates the problematic code.
-
-### 5. Fix Generation
-
-Bob AI generates a fix based on:
-- Error details
-- Code context
-- Repository structure
-
-### 6. PR Creation
-
-System creates a pull request with:
-- Fixed code
-- Detailed explanation
-- Link to original error log
-- Suggested reviewers
-
-## 🧪 Testing
-
-### Run Tests
-
-```bash
-# All tests
-pytest
-
-# With coverage
-pytest --cov=src --cov-report=html
-
-# Specific test
-pytest tests/test_analyzer.py
-```
-
-### Integration Tests
-
-```bash
-# Requires test repository
-pytest tests/integration/
-```
-
-## 📊 Monitoring
-
-### Metrics
-
-The system exposes Prometheus metrics at `/metrics`:
-
-- `autofix_logs_ingested_total` - Total logs ingested
-- `autofix_errors_analyzed_total` - Total errors analyzed
-- `autofix_prs_created_total` - Total PRs created
-- `autofix_processing_duration_seconds` - Processing time
-
-### Logs
-
-Structured JSON logs are written to stdout:
-
+**Response:**
 ```json
 {
-  "timestamp": "2024-01-15T10:30:00Z",
-  "level": "INFO",
-  "message": "PR created successfully",
-  "pr_number": 123,
-  "repository": "org/my-web-app"
+  "status": "success",
+  "log_id": "log-abc123",
+  "message": "Log file ingested and analyzed",
+  "analysis_url": "/api/v1/analysis/log-abc123"
 }
 ```
 
-## 🐳 Docker Deployment
-
-### Using Docker Compose
+### 2. View Analysis
 
 ```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+curl "http://localhost:8000/api/v1/analysis/log-abc123"
 ```
 
-### Production Deployment
+**Response:**
+```json
+{
+  "log_id": "log-abc123",
+  "error_type": "TypeError",
+  "file_path": "consumer/billing_consumer.py",
+  "line_number": 45,
+  "analysis": "Attempting to access property on None object",
+  "fixable": true
+}
+```
 
-See `docs/DEPLOYMENT.md` for Kubernetes deployment guide.
-
-## 🔐 Security
-
-### GitHub App Permissions
-
-Required permissions:
-- **Contents**: Read & Write (for creating branches and commits)
-- **Pull Requests**: Read & Write (for creating PRs)
-- **Issues**: Read & Write (for linking issues)
-
-### API Authentication
-
-Use API keys for log ingestion:
+### 3. Generate Fix
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/logs/ingest \
-  -H "X-API-Key: your-api-key" \
-  -H "Content-Type: application/json" \
-  -d '...'
+curl -X POST "http://localhost:8000/api/v1/fix/log-abc123"
 ```
 
-## 📈 Scalability
+**Response:**
+```json
+{
+  "log_id": "log-abc123",
+  "fix_generated": true,
+  "detected_file_path": "consumer/billing_consumer.py",
+  "fix": {
+    "file_path": "consumer/billing_consumer.py",
+    "file_changes": [
+      {
+        "file_path": "consumer/billing_consumer.py",
+        "original_code": "result = data.user",
+        "fixed_code": "result = data.get('user')"
+      }
+    ],
+    "explanation": "Added null check to prevent TypeError"
+  }
+}
+```
 
-### Horizontal Scaling
-
-Run multiple worker instances:
+### 4. Create Pull Request (Automatic!)
 
 ```bash
-# Worker 1
-python -m src.worker --id worker-1
-
-# Worker 2
-python -m src.worker --id worker-2
+curl -X POST "http://localhost:8000/api/v1/pr/create/log-abc123" \
+  -F "base_branch=main"
 ```
 
-### Load Balancing
+**Note:** `target_file_path` is **automatically detected** from the fix! No manual input needed.
 
-Use nginx or cloud load balancer for API endpoints.
-
-## 🛠️ Development
-
-### Setup Development Environment
-
-```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Install pre-commit hooks
-pre-commit install
-
-# Run linters
-black src/
-flake8 src/
-mypy src/
+**Response:**
+```json
+{
+  "status": "success",
+  "log_id": "log-abc123",
+  "branch_name": "autofix/log-abc123",
+  "target_file_path": "consumer/billing_consumer.py",
+  "pull_request": {
+    "pr_number": 42,
+    "pr_url": "https://github.com/your-org/your-repo/pull/42",
+    "status": "CREATED"
+  }
+}
 ```
 
-### Adding New Features
+## 🔧 Configuration
 
-1. Create feature branch
-2. Implement changes
-3. Add tests
-4. Update documentation
-5. Submit PR
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `GITHUB_TOKEN` | **Yes** | - | GitHub Personal Access Token |
+| `BOB_CLI_COMMAND` | No | `bob` | Path to Bob CLI executable |
+| `OPENAI_API_KEY` | No | - | OpenAI API key (fallback) |
+| `AI_AGENT_PRIMARY` | No | `bob_cli` | Primary AI agent (`bob_cli` or `openai`) |
+
+### GitHub Token Setup
+
+1. Go to GitHub Settings → Developer settings → Personal access tokens
+2. Generate new token (classic) with these permissions:
+   - `repo` (Full control of private repositories)
+3. Copy the token and set it as `GITHUB_TOKEN` environment variable
+
+### Bob CLI Setup
+
+1. Install Bob CLI from: https://github.com/RooVetGit/Roo-Code
+2. Ensure `bob` command is in your PATH
+3. Or set `BOB_CLI_COMMAND` to the full path
+
+## 🌟 Key Features Explained
+
+### 1. Path Normalization
+
+Handles absolute paths from Docker containers or runtime environments:
+
+```
+Input:  /app/consumer/billing_consumer.py
+Output: consumer/billing_consumer.py (actual repo path)
+```
+
+**Strategies:**
+- Direct path matching
+- Filename search across repo
+- Suffix matching
+- Best match scoring
+
+### 2. Multi-File Fixes
+
+Supports fixing multiple files in a single PR:
+
+```json
+{
+  "file_changes": [
+    {"file_path": "services/user.py", "fixed_code": "..."},
+    {"file_path": "utils/validator.py", "fixed_code": "..."},
+    {"file_path": "tests/test_user.py", "fixed_code": "..."}
+  ]
+}
+```
+
+### 3. Safe Code Replacement
+
+Uses line-based replacement to preserve unrelated code:
+
+```python
+# Only replaces lines 45-55, keeps everything else intact
+replace_lines_in_file(
+    file_path="billing.py",
+    start_line=45,
+    end_line=55,
+    fixed_code="..."
+)
+```
+
+### 4. Auto-Detection
+
+File paths are automatically detected and passed through the workflow:
+
+```
+Log Analysis → Detects file_path
+     ↓
+Fix Generation → Stores file_path
+     ↓
+PR Creation → Uses file_path (no manual input!)
+```
 
 ## 📚 Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) - Detailed system architecture
-- [API Reference](docs/API.md) - Complete API documentation
-- [Deployment](docs/DEPLOYMENT.md) - Deployment guide
-- [Contributing](docs/CONTRIBUTING.md) - Contribution guidelines
+- **[Multi-File Fixes & Path Normalization](docs/MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md)** - Detailed guide
+- **[File Path Auto-Detection Flow](docs/FILE_PATH_AUTO_DETECTION_FLOW.md)** - How auto-detection works
+- **[System Design](AUTOMATED_FIX_SYSTEM_DESIGN.md)** - Architecture overview
+- **[Implementation Guide](IMPLEMENTATION_GUIDE.md)** - Development guide
 
-## 🤝 Contributing
+## 🧪 Testing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md).
+### Manual Testing
 
-## 📄 License
+```bash
+# 1. Create a test log file
+cat > test_error.log << EOF
+Traceback (most recent call last):
+  File "/app/consumer/billing_consumer.py", line 45, in process
+    result = data.user
+TypeError: 'NoneType' object has no attribute 'user'
+EOF
 
-MIT License - see [LICENSE](LICENSE) file.
+# 2. Upload to system
+curl -X POST "http://localhost:8000/api/v1/logs/ingest" \
+  -F "repository_url=https://github.com/your-org/your-repo" \
+  -F "log_file=@test_error.log"
 
-## 🆘 Support
+# 3. Follow the workflow (analysis → fix → PR)
+```
 
-- **Issues**: GitHub Issues
-- **Discussions**: GitHub Discussions
-- **Email**: support@autofix-system.com
+## 🔐 Security
 
-## 🎯 Roadmap
+- **GitHub Token**: Keep your token secure, never commit it
+- **API Keys**: Store in environment variables, not in code
+- **PR Review**: Always review auto-generated PRs before merging
 
-- [x] Core log ingestion
-- [x] Bob AI integration
-- [x] GitHub PR creation
-- [ ] Dashboard UI
-- [ ] GitLab support
-- [ ] Bitbucket support
-- [ ] Slack notifications
-- [ ] Auto-merge for low-risk fixes
-- [ ] ML-based fix validation
+## 🛠️ Development
+
+### Local Development
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with auto-reload
+uvicorn src.main:app --reload --port 8000
+```
+
+### Adding Features
+
+1. Create feature branch
+2. Implement changes in `src/`
+3. Update documentation in `docs/`
+4. Test thoroughly
+5. Submit PR
+
+## 🆘 Troubleshooting
+
+### "original_code snippet was not found"
+
+**Solution:** The system now automatically falls back to line-based replacement. Ensure your error analysis includes `line_number`.
+
+### "Could not auto-detect target file path"
+
+**Solution:** Provide explicit `target_file_path` parameter:
+```bash
+curl -X POST ".../pr/create/log-abc123" \
+  -F "target_file_path=src/services/user.py"
+```
+
+### "Bob CLI not found"
+
+**Solution:** Either:
+1. Install Bob CLI and add to PATH
+2. Set `BOB_CLI_COMMAND` to full path
+3. Use OpenAI: `export AI_AGENT_PRIMARY=openai`
 
 ## 📊 Status
 
-**Current Version**: 1.0.0-beta  
+**Current Version**: 1.0.0-MVP  
 **Status**: Production Ready  
 **Last Updated**: 2024-01-15
 
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
 ---
 
-Built with ❤️ using Bob AI Agent
+**Built with ❤️ using Bob AI Agent and OpenAI**
