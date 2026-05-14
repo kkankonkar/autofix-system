@@ -1,0 +1,27 @@
+# CodeMedic AutoFix System - Production Dependencies
+# Minimal dependencies for running the application in containers
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# AI Integration
+openai==1.3.0
+
+# GitHub Integration
+PyGithub==2.1.1
+GitPython==3.1.40
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+
+# Multipart Uploads
+python-multipart==0.0.6
+
+# Utilities
+python-dotenv==1.0.0
+
+# Made with ❤️ by CodeMedic Team
