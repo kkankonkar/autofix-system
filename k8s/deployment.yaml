@@ -1,0 +1,157 @@
+# CodeMedic AutoFix System - Kubernetes Deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: codemedic
+  labels:
+    name: codemedic
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: codemedic-secrets
+  namespace: codemedic
+type: Opaque
+stringData:
+  github-token: "REPLACE_WITH_YOUR_GITHUB_TOKEN"
+  bobshell-api-key: "REPLACE_WITH_YOUR_BOBSHELL_API_KEY"
+  openai-api-key: "REPLACE_WITH_YOUR_OPENAI_API_KEY"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: codemedic-config
+  namespace: codemedic
+data:
+  AI_AGENT_PRIMARY: "bob_cli"
+  AI_AGENT_FALLBACK: "openai"
+  BOB_CLI_COMMAND: "bob"
+  LOG_LEVEL: "INFO"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autofix-system
+  namespace: codemedic
+  labels:
+    app: autofix-system
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: autofix-system
+  template:
+    metadata:
+      labels:
+        app: autofix-system
+        version: v1
+    spec:
+      containers:
+      - name: autofix-api
+        image: codemedic/autofix-system:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        env:
+        - name: GITHUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: codemedic-secrets
+              key: github-token
+        - name: BOBSHELL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: codemedic-secrets
+              key: bobshell-api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: codemedic-secrets
+              key: openai-api-key
+              optional: true
+        envFrom:
+        - configMapRef:
+            name: codemedic-config
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: repos
+          mountPath: /tmp/autofix-system-repos
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: repos
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: autofix-service
+  namespace: codemedic
+  labels:
+    app: autofix-system
+spec:
+  type: LoadBalancer
+  selector:
+    app: autofix-system
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+    name: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: autofix-hpa
+  namespace: codemedic
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: autofix-system
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# Made with ❤️ by CodeMedic Team
+
+# Made with Bob
