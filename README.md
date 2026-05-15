@@ -1,4 +1,6 @@
-# AutoFix System - Automated Code Fix with AI
+# CodeMedic AutoFix System - Automated Code Fix with AI
+
+**Team:** CodeMedic
 
 An intelligent system that automatically analyzes application logs, identifies code errors, generates fixes using AI (Bob CLI or OpenAI), and creates pull requests in GitHub repositories.
 
@@ -30,11 +32,21 @@ autofix-system/
 │   ├── fix_generator/     # Fix generation with multi-file support
 │   ├── pr_creator/        # PR creation
 │   ├── models/            # Data models (FixProposal, FileChange, etc.)
+│   ├── utils/             # Utilities (log parser, etc.)
 │   └── main.py            # FastAPI application
 ├── docs/                  # Documentation
+│   ├── MULTI_ERROR_PROCESSING.md  # Multi-error feature guide
 │   ├── MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md
 │   ├── FILE_PATH_AUTO_DETECTION_FLOW.md
+│   ├── CLOUD_DEPLOYMENT_GUIDE.md  # Cloud deployment guide
 │   └── AUTO_DETECT_FILE_PATH.md
+├── k8s/                   # Kubernetes configurations
+├── aws/                   # AWS ECS configurations
+├── tests/                 # Test files and sample logs
+├── AGENT.md              # Evaluation guide for judges/AI
+├── DOCKER_QUICKSTART.md  # Docker setup guide
+├── docker-compose.yml    # Docker Compose configuration
+├── Dockerfile            # Container image definition
 ├── requirements.txt       # Python dependencies
 ├── start.sh              # Quick start script
 └── README.md             # This file
@@ -178,9 +190,12 @@ curl -X POST "http://localhost:8000/api/v1/pr/create/log-abc123" \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GITHUB_TOKEN` | **Yes** | - | GitHub Personal Access Token |
+| `BOBSHELL_API_KEY` | No | - | Bob CLI API key |
 | `BOB_CLI_COMMAND` | No | `bob` | Path to Bob CLI executable |
 | `OPENAI_API_KEY` | No | - | OpenAI API key (fallback) |
 | `AI_AGENT_PRIMARY` | No | `bob_cli` | Primary AI agent (`bob_cli` or `openai`) |
+| `AI_AGENT_FALLBACK` | No | `openai` | Fallback AI agent |
+| `LOG_LEVEL` | No | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
 
 ### GitHub Token Setup
 
@@ -254,10 +269,22 @@ PR Creation → Uses file_path (no manual input!)
 
 ## 📚 Documentation
 
-- **[Multi-File Fixes & Path Normalization](docs/MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md)** - Detailed guide
-- **[File Path Auto-Detection Flow](docs/FILE_PATH_AUTO_DETECTION_FLOW.md)** - How auto-detection works
+**For Users:**
+- **[Quick Start](README.md)** - This file
+- **[Docker Deployment](DOCKER_QUICKSTART.md)** - Container setup
+- **[Cloud Deployment](docs/CLOUD_DEPLOYMENT_GUIDE.md)** - Kubernetes & AWS ECS
+
+**For Developers:**
 - **[System Design](AUTOMATED_FIX_SYSTEM_DESIGN.md)** - Architecture overview
 - **[Implementation Guide](IMPLEMENTATION_GUIDE.md)** - Development guide
+- **[Multi-File Fixes](docs/MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md)** - Path handling
+- **[File Path Auto-Detection](docs/FILE_PATH_AUTO_DETECTION_FLOW.md)** - Detection logic
+
+**For Evaluators:**
+- **[AGENT.md](AGENT.md)** - Evaluation guide for judges & AI agents
+
+**Advanced Features:**
+- **[Multi-Error Processing](docs/MULTI_ERROR_PROCESSING.md)** - Process multiple errors (future feature)
 
 ## 🧪 Testing
 
@@ -297,6 +324,30 @@ pip install -r requirements.txt
 # Run with auto-reload
 uvicorn src.main:app --reload --port 8000
 ```
+
+## 🐳 Docker Deployment
+
+### Quick Start with Docker
+
+```bash
+# Using helper script (auto-detects platform)
+./run-docker.sh
+
+# Or with Docker Compose
+docker-compose up -d
+
+# Or with Podman
+./run-podman.sh
+```
+
+### Cloud Deployment
+
+- **Kubernetes**: See `k8s/deployment.yaml`
+- **AWS ECS**: See `aws/ecs-task-definition.json`  
+- **Full Guide**: See `docs/CLOUD_DEPLOYMENT_GUIDE.md`
+
+**GitHub Access from Cloud**: ✅ Yes, GitHub is fully accessible from AWS ECS and Kubernetes via public internet (HTTPS port 443)
+
 
 ### Adding Features
 
