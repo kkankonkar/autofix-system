@@ -17,12 +17,19 @@ from src.fix_generator import FixGenerator
 from src.pr_creator import PRCreator
 from src.repo_manager import RepoManager
 
+# Import analytics routes
+from src.analytics.routes import router as analytics_router
+from src.database import engine, Base
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AutoFix System MVP",
     description="Automated code fix system with AI integration",
     version="1.0.0-mvp"
 )
+
+# Include analytics routes
+app.include_router(analytics_router)
 
 # Simple in-memory storage for MVP
 logs_db = {}
@@ -656,6 +663,14 @@ async def startup_event():
     """Initialize the application."""
     print("🚀 AutoFix System MVP starting...")
     print(f"📊 Environment: {os.getenv('ENVIRONMENT', 'development')}")
+    
+    # Create database tables
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("✅ Database tables created/verified")
+    except Exception as e:
+        print(f"⚠️  Database initialization warning: {e}")
+    
     print("✅ System ready!")
 
 
