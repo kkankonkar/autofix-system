@@ -2,6 +2,29 @@
 version: '3.8'
 
 services:
+  # MySQL Database for Analytics
+  mysql:
+    image: mysql:8.0
+    container_name: autofix-mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-rootpassword}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-autofix_analytics}
+      - MYSQL_USER=${MYSQL_USER:-autofix}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-autofix123}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - autofix-network
+
+  # AutoFix System Application
   autofix-system:
     build:
       context: .
@@ -23,6 +46,17 @@ services:
       - AI_AGENT_FALLBACK=${AI_AGENT_FALLBACK:-openai}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       
+      # MySQL Database Configuration
+      - DATABASE_URL=mysql+pymysql://${MYSQL_USER:-autofix}:${MYSQL_PASSWORD:-autofix123}@mysql:3306/${MYSQL_DATABASE:-autofix_analytics}
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=${MYSQL_USER:-autofix}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-autofix123}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-autofix_analytics}
+      
+      # Analytics API Configuration
+      - ANALYTICS_API_KEY=${ANALYTICS_API_KEY:-your-secret-api-key-here}
+      
       # Application Configuration
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -31,6 +65,9 @@ services:
       - ./logs:/app/logs
       # Mount temporary repository directory
       - autofix-repos:/tmp/autofix-system-repos
+    depends_on:
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -43,6 +80,8 @@ services:
 
 volumes:
   autofix-repos:
+    driver: local
+  mysql-data:
     driver: local
 
 networks:
