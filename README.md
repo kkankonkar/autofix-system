@@ -5,9 +5,11 @@ An intelligent system that automatically analyzes application logs, identifies c
 ## 🎯 Features
 
 - **Automated Log Analysis** - Upload log files and get instant error analysis
+- **Multi-Error Processing** - Extracts and fixes 2-3 errors from a single log file ⭐ NEW
 - **AI-Powered Fix Generation** - Uses Bob CLI (primary) or OpenAI (fallback) to generate fixes
 - **Path Normalization** - Handles absolute paths from containers (e.g., `/app/file.py` → `src/file.py`)
 - **Multi-File Fixes** - Supports fixing multiple files in a single PR
+- **Combined PR Creation** - All fixes merged into one comprehensive pull request
 - **Safe Code Replacement** - Line-based replacement preserves unrelated code
 - **Automatic PR Creation** - Creates pull requests with detailed explanations
 - **Generic Design** - Works with any application and GitHub repository
@@ -32,6 +34,7 @@ autofix-system/
 │   ├── models/            # Data models (FixProposal, FileChange, etc.)
 │   └── main.py            # FastAPI application
 ├── docs/                  # Documentation
+│   ├── MULTI_ERROR_PROCESSING.md  # NEW: Multi-error processing guide
 │   ├── MULTI_FILE_FIXES_AND_PATH_NORMALIZATION.md
 │   ├── FILE_PATH_AUTO_DETECTION_FLOW.md
 │   └── AUTO_DETECT_FILE_PATH.md

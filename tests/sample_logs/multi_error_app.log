@@ -1,0 +1,30 @@
+2024-01-15 10:30:00 INFO Application started successfully
+2024-01-15 10:30:05 INFO Processing user request for user_id=12345
+
+2024-01-15 10:30:10 ERROR TypeError: Cannot read property 'name' of undefined
+    at getUserName (src/services/user_service.js:42:15)
+    at processUser (src/controllers/user_controller.js:30:10)
+    at handleRequest (src/app.js:120:5)
+Context: Attempting to access user.name when user object is undefined
+
+2024-01-15 10:30:15 INFO Retrying user request
+2024-01-15 10:30:20 WARN Database connection slow (2.5s)
+
+2024-01-15 10:30:25 ERROR NullPointerException in billing calculation
+Traceback (most recent call last):
+  File "src/billing/calculator.py", line 156, in calculate_total
+    total = item.price * quantity
+AttributeError: 'NoneType' object has no attribute 'price'
+Context: Item object is None when calculating billing total
+
+2024-01-15 10:30:30 INFO Attempting to generate monthly report
+2024-01-15 10:30:35 DEBUG Loading report data from database
+
+2024-01-15 10:30:40 ERROR IndexError: list index out of range
+  File "src/reports/generator.py", line 89, in generate_report
+    data = results[index]
+IndexError: list index out of range
+Context: Accessing array index 5 when array length is 3
+
+2024-01-15 10:30:45 INFO Error recovery initiated
+2024-01-15 10:30:50 INFO Application continuing with degraded functionality
