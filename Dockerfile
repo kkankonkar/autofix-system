@@ -39,8 +39,6 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY src/ ./src/
 COPY docs/ ./docs/
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
 COPY *.md ./
 COPY *.sh ./
 
