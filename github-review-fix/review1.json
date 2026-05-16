@@ -1,0 +1,257 @@
+{
+  "findings": [
+    {
+      "file": "SAP-Readme.md",
+      "line": 15,
+      "column": 1,
+      "type": "security",
+      "severity": "medium",
+      "description": "Hardcoded password in documentation example",
+      "explanation": "The documentation contains a hardcoded password 'my-secret-pwd' in the podman run command example. While this is documentation, it sets a bad precedent and users might copy-paste this into production.",
+      "suggestion": "Replace with a placeholder like 'YOUR_SECURE_PASSWORD' and add a note to use strong passwords in production environments."
+    },
+    {
+      "file": "SAP-Readme.md",
+      "line": 33,
+      "column": 1,
+      "type": "security",
+      "severity": "low",
+      "description": "Hardcoded API endpoint and key reference in documentation",
+      "explanation": "Documentation mentions hardcoded environment variables for SC_HOST_ENDPOINT and SC_API_KEY without emphasizing security best practices.",
+      "suggestion": "Add a security note about keeping API keys secure and not committing them to version control."
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 47,
+      "column": 1,
+      "type": "bug",
+      "severity": "high",
+      "description": "Missing parameter in WHERE clause causes compilation error",
+      "explanation": "The WHERE clause has 'CreatedAt <= ?' but jobStartTime is not passed as a parameter to the Where() method. This will cause a runtime error or incorrect query execution.",
+      "suggestion": "Add jobStartTime as the fourth parameter: Where(\"SCSendStatus IN(?, ?) AND CreatedAt <= ?\", models.UsageSCSendStatus.NOTSENT, models.UsageSCSendStatus.FILE_SEND_FAILED, jobStartTime)"
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 62,
+      "column": 2,
+      "type": "bug",
+      "severity": "medium",
+      "description": "Function returns nil instead of *gorm.DB",
+      "explanation": "The UndoFileSendStatusUpdate function signature declares return type *gorm.DB but returns nil. This is inconsistent and could cause nil pointer dereferences.",
+      "suggestion": "Either change return type to error or return the transaction object: return stmt"
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 145,
+      "column": 13,
+      "type": "bug",
+      "severity": "high",
+      "description": "Call to undefined function getSCUsagesFromPgUsages",
+      "explanation": "The function getSCUsagesFromPgUsages is called but not defined in this file or imported. This will cause a compilation error.",
+      "suggestion": "Define the getSCUsagesFromPgUsages function or import it from the appropriate package."
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 152,
+      "column": 9,
+      "type": "bug",
+      "severity": "high",
+      "description": "Call to undefined function getSCUsagesFromPgUsages",
+      "explanation": "The function getSCUsagesFromPgUsages is called but not defined in this file or imported. This will cause a compilation error.",
+      "suggestion": "Define the getSCUsagesFromPgUsages function or import it from the appropriate package."
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 170,
+      "column": 2,
+      "type": "bug",
+      "severity": "medium",
+      "description": "Function returns nil instead of *gorm.DB",
+      "explanation": "The UndoFileSendStatusUpdate function signature declares return type *gorm.DB but returns nil. This is inconsistent and could cause nil pointer dereferences.",
+      "suggestion": "Either change return type to error or return the transaction object: return stmt"
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 289,
+      "column": 13,
+      "type": "bug",
+      "severity": "high",
+      "description": "Call to undefined function getSCUsagesFromDailyUsages",
+      "explanation": "The function getSCUsagesFromDailyUsages is called but not defined in this file or imported. This will cause a compilation error.",
+      "suggestion": "Define the getSCUsagesFromDailyUsages function or import it from the appropriate package."
+    },
+    {
+      "file": "clients/db/job_types.go",
+      "line": 294,
+      "column": 9,
+      "type": "bug",
+      "severity": "high",
+      "description": "Call to undefined function getSCUsagesFromDailyUsages",
+      "explanation": "The function getSCUsagesFromDailyUsages is called but not defined in this file or imported. This will cause a compilation error.",
+      "suggestion": "Define the getSCUsagesFromDailyUsages function or import it from the appropriate package."
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 70,
+      "column": 2,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Magic number should be constant",
+      "explanation": "The magic number 60 for CTX_TIMEOUT_IN_MINS is already a constant, but the name could be more descriptive about what it represents.",
+      "suggestion": "Consider renaming to DEFAULT_CTX_TIMEOUT_IN_MINS or JOB_TIMEOUT_MINUTES to be more explicit."
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 72,
+      "column": 2,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Complex calculation should be documented",
+      "explanation": "The file size limit calculation '1*1024*1024 - 10*1024' is not immediately clear. The comment explains it's 1MB - 10KB but the calculation could be clearer.",
+      "suggestion": "Define separate constants: const ONE_MB = 1024 * 1024; const TEN_KB = 10 * 1024; FILE_SIZE_LIMIT_SWC = ONE_MB - TEN_KB"
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 76,
+      "column": 2,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Magic number for batch limit",
+      "explanation": "The MAX_BATCHES constant is set to 5 but there's no explanation of why 5 was chosen or how to determine the right value.",
+      "suggestion": "Add a comment explaining the rationale for 5 batches or make it configurable via environment variable."
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 148,
+      "column": 16,
+      "type": "bug",
+      "severity": "high",
+      "description": "Type assertion without ok check can cause panic",
+      "explanation": "The code performs a type assertion sendToSWC.(bool) without checking if the assertion is valid. If sendToSWC is not a bool, this will panic.",
+      "suggestion": "Use the two-value form: if sendToSWCBool, ok := sendToSWC.(bool); !ok { /* handle error */ } else if !sendToSWCBool { /* skip */ }"
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 312,
+      "column": 5,
+      "type": "bug",
+      "severity": "medium",
+      "description": "Error from UndoFileSendStatusUpdate is ignored",
+      "explanation": "The UndoFileSendStatusUpdate method is called but its return value is not checked. If the undo operation fails, the usage status will be incorrect.",
+      "suggestion": "Check the error: if err := pgm.UsageManager.UndoFileSendStatusUpdate(ctx, usage.DatabaseID); err != nil { log.Error().Err(err).Msg(\"Failed to undo file send status\") }"
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 365,
+      "column": 4,
+      "type": "bug",
+      "severity": "medium",
+      "description": "Error from UndoFileSendStatusUpdate is ignored",
+      "explanation": "The UndoFileSendStatusUpdate method is called but its return value is not checked. If the undo operation fails, the usage status will be incorrect.",
+      "suggestion": "Check the error: if err := pgm.UsageManager.UndoFileSendStatusUpdate(ctx, usage.DatabaseID); err != nil { log.Error().Err(err).Msg(\"Failed to undo file send status\") }"
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 484,
+      "column": 31,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Magic number for concurrent goroutines",
+      "explanation": "The channel buffer size of 3 determines the number of concurrent goroutines but is hardcoded without explanation.",
+      "suggestion": "Define as a constant: const MAX_CONCURRENT_SUBSCRIPTIONS = 3, or make it configurable via environment variable."
+    },
+    {
+      "file": "pgmonitor/pgmonitor.go",
+      "line": 486,
+      "column": 30,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Magic number for error channel buffer",
+      "explanation": "The error channel buffer size of 10 is hardcoded without explanation of why 10 was chosen.",
+      "suggestion": "Define as a constant: const ERROR_CHANNEL_BUFFER_SIZE = 10, with a comment explaining the rationale."
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 146,
+      "column": 26,
+      "type": "security",
+      "severity": "medium",
+      "description": "Hardcoded password in test code",
+      "explanation": "The test contains a hardcoded password 'my-secret-pwd' which could be accidentally used in production if the test code is copied.",
+      "suggestion": "Use a constant or environment variable for test passwords, and add a comment that this is for testing only."
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 147,
+      "column": 20,
+      "type": "maintainability",
+      "severity": "low",
+      "description": "Hardcoded placeholder password in connection string",
+      "explanation": "The connection string contains 'password_place_holder' which is then replaced. This pattern is fragile and error-prone.",
+      "suggestion": "Use string formatting or a connection string builder instead of string replacement."
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 221,
+      "column": 33,
+      "type": "bug",
+      "severity": "high",
+      "description": "Missing required parameter in NewSummarizer call",
+      "explanation": "Based on the code in pgmonitor.go line 468, NewSummarizer() should accept a jobType parameter, but it's called without arguments here.",
+      "suggestion": "Add the jobType parameter: summary.NewSummarizer(models.JobType.CONTRACT)"
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 349,
+      "column": 33,
+      "type": "bug",
+      "severity": "high",
+      "description": "Missing required parameter in NewSummarizer call",
+      "explanation": "Based on the code in pgmonitor.go line 468, NewSummarizer() should accept a jobType parameter, but it's called without arguments here.",
+      "suggestion": "Add the jobType parameter: summary.NewSummarizer(models.JobType.CONTRACT)"
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 360,
+      "column": 26,
+      "type": "security",
+      "severity": "medium",
+      "description": "Hardcoded password in test code",
+      "explanation": "The test contains a hardcoded password 'my-secret-pwd' which could be accidentally used in production if the test code is copied.",
+      "suggestion": "Use a constant or environment variable for test passwords, and add a comment that this is for testing only."
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 432,
+      "column": 33,
+      "type": "bug",
+      "severity": "high",
+      "description": "Missing required parameter in NewSummarizer call",
+      "explanation": "Based on the code in pgmonitor.go line 468, NewSummarizer() should accept a jobType parameter, but it's called without arguments here.",
+      "suggestion": "Add the jobType parameter: summary.NewSummarizer(models.JobType.PAYGO)"
+    },
+    {
+      "file": "pgmonitor/pgmonitor_test.go",
+      "line": 556,
+      "column": 33,
+      "type": "bug",
+      "severity": "high",
+      "description": "Missing required parameter in NewSummarizer call",
+      "explanation": "Based on the code in pgmonitor.go line 468, NewSummarizer() should accept a jobType parameter, but it's called without arguments here.",
+      "suggestion": "Add the jobType parameter: summary.NewSummarizer(models.JobType.PAYGO)"
+    }
+  ],
+  "summary": {
+    "total_findings": 24,
+    "by_severity": {
+      "high": 10,
+      "medium": 6,
+      "low": 8
+    },
+    "by_type": {
+      "bug": 13,
+      "security": 5,
+      "maintainability": 6
+    }
+  }
+}

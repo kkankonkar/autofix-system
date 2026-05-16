@@ -1,0 +1,98 @@
+name: Fixium Code Review Bot
+
+on:
+  issue_comment:
+    types: [created]
+
+# Only allow one review per PR at a time
+concurrency:
+  group: fixium-review-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  fixium-review:
+    # Only run on PR comments that contain supported Fixium commands
+    if: |
+      github.event.issue.pull_request &&
+      (
+        contains(github.event.comment.body, 'Fixium:review') ||
+        contains(github.event.comment.body, 'Fixium:implement')
+      )
+    
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch the PR branch
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Bob CLI
+        run: |
+          # TODO: Add actual Bob CLI installation
+          # For now, assume it's available in the environment
+          echo "Bob CLI installation placeholder"
+      
+      - name: Set environment variables
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOBSHELL_API_KEY: ${{ secrets.BOBSHELL_API_KEY }}
+          FIXIUM_AUTHORIZED_USERS: ${{ secrets.FIXIUM_AUTHORIZED_USERS }}
+        run: |
+          echo "GITHUB_TOKEN=${GITHUB_TOKEN}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
+          echo "GITHUB_OWNER=${GITHUB_REPOSITORY_OWNER}" >> $GITHUB_ENV
+          echo "GITHUB_REPO=$(echo ${GITHUB_REPOSITORY} | cut -d'/' -f2)" >> $GITHUB_ENV
+          echo "PR_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
+          echo "COMMENT_ID=${{ github.event.comment.id }}" >> $GITHUB_ENV
+          echo "REPLY_TO_COMMENT_ID=${{ github.event.comment.in_reply_to_id }}" >> $GITHUB_ENV
+          echo "COMMENT_BODY=${{ github.event.comment.body }}" >> $GITHUB_ENV
+          echo "COMMENT_USER=${{ github.event.comment.user.login }}" >> $GITHUB_ENV
+          echo "BOBSHELL_API_KEY=${BOBSHELL_API_KEY}" >> $GITHUB_ENV
+          echo "FIXIUM_AUTHORIZED_USERS=${FIXIUM_AUTHORIZED_USERS}" >> $GITHUB_ENV
+      
+      - name: Run Fixium Code Review
+        run: |
+          python -m fixium.main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOBSHELL_API_KEY: ${{ secrets.BOBSHELL_API_KEY }}
+          FIXIUM_AUTHORIZED_USERS: ${{ secrets.FIXIUM_AUTHORIZED_USERS }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPLY_TO_COMMENT_ID: ${{ github.event.comment.in_reply_to_id }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+      
+      - name: Upload review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixium-review-${{ github.event.issue.number }}
+          path: |
+            review_pr${{ github.event.issue.number }}.json
+          retention-days: 30
+          if-no-files-found: ignore
+
+# Made with Bob
