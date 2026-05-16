@@ -4,12 +4,15 @@ A simplified MVP that demonstrates the core functionality.
 """
 
 from datetime import datetime
+import logging
 import os
+import sys
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from src.ai_agent import HybridAgent
@@ -21,11 +24,36 @@ from src.repo_manager import RepoManager
 from src.analytics.routes import router as analytics_router
 from src.database import engine, Base
 
+# Configure logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AutoFix System MVP",
     description="Automated code fix system with AI integration",
-    version="1.0.0-mvp"
+    version="1.0.0-mvp",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
+
+# Configure CORS
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,https://solution3.demopersistent.com").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include analytics routes
@@ -96,14 +124,18 @@ async def ingest_log(
     """
     Ingest an entire log file and repository URL for processing.
     """
+    logger.info(f"Received log ingestion request: repository={repository_url}, filename={log_file.filename}")
+    
     raw_log_bytes = await log_file.read()
     if not raw_log_bytes:
+        logger.error("Uploaded log file is empty")
         raise HTTPException(status_code=400, detail="Uploaded log file is empty")
 
     raw_log = raw_log_bytes.decode("utf-8", errors="replace")
     parsed_log = parse_uploaded_log(repository_url, raw_log, log_file.filename)
 
     log_id = f"log-{uuid.uuid4().hex[:8]}"
+    logger.info(f"Generated log_id: {log_id}")
 
     logs_db[log_id] = {
         "id": log_id,
@@ -111,6 +143,7 @@ async def ingest_log(
         **parsed_log.dict()
     }
 
+    logger.info(f"Starting error analysis for log_id: {log_id}")
     analysis = await analyze_error_mvp(parsed_log)
 
     analyses_db[log_id] = {
@@ -118,6 +151,8 @@ async def ingest_log(
         "timestamp": datetime.utcnow().isoformat(),
         **analysis
     }
+    
+    logger.info(f"Log ingestion completed: log_id={log_id}, error_type={analysis.get('error_type')}")
 
     return {
         "status": "success",
