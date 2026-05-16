@@ -1,9 +1,9 @@
-# CodeMedic AutoFix System - Docker Image with Bob CLI Support
+# Fixium Code Review Bot - Docker Image
 FROM python:3.11-slim
 
 # Set metadata
-LABEL maintainer="CodeMedic Team"
-LABEL description="CodeMedic AutoFix System - AI-powered automated code fixes with Bob CLI"
+LABEL maintainer="Fixium Team"
+LABEL description="Fixium - AI-powered code review bot for GitHub Pull Requests"
 LABEL version="1.0.0"
 
 # Install system dependencies
@@ -28,39 +28,40 @@ RUN curl -fsSL https://bob.ibm.com/download/bobshell.sh | bash && \
     bob --version
 
 # Set working directory
-WORKDIR /app
+WORKDIR /fixium
 
 # Copy Python requirements and install dependencies
-# Use production requirements (no testing/dev dependencies)
-COPY requirements-prod.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements-prod.txt
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY src/ ./src/
-COPY docs/ ./docs/
-COPY *.md ./
-COPY *.sh ./
+COPY fixium/ ./fixium/
+COPY tests/ ./tests/
+COPY lib/ ./lib/
+COPY prompts/ ./prompts/
+COPY schema/ ./schema/
+COPY config/ ./config/
+COPY review_workflow.sh .
+COPY submit_pr_comments.sh .
+COPY implement_finding.sh .
+COPY pytest.ini .
 
 # Make shell scripts executable
-RUN chmod +x *.sh 2>/dev/null || true
+RUN chmod +x /fixium/*.sh /fixium/lib/*.sh
 
 # Set Python path
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/fixium
 ENV PYTHONUNBUFFERED=1
 
-# Create directory for temporary repositories
-RUN mkdir -p /tmp/autofix-system-repos && \
-    chmod 777 /tmp/autofix-system-repos
+# Create directory for review outputs
+RUN mkdir -p /fixium/outputs
 
-# Expose port
-EXPOSE 8000
+# Set entrypoint to Python main module
+ENTRYPOINT ["python", "-m", "fixium.main"]
 
-# Health check
+# Health check (optional)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD python -c "import fixium; print('Fixium is healthy')" || exit 1
 
-# Start the application
-CMD ["sh", "-c", "printenv && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
-
-# Made with ❤️ by CodeMedic Team
+# Made with Bob
