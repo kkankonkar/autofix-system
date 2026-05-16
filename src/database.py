@@ -10,10 +10,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool
 
-# Database URL from environment variable
+# Database URL from environment variables
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://root:password@localhost:3306/autofix_db"
+    f"mysql+pymysql://{os.getenv('DB_USER', 'root')}:{os.getenv('DB_PASSWORD', 'secret')}"
+    f"@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '3306')}/{os.getenv('DB_NAME', 'amazon_api')}"
 )
 
 # Create SQLAlchemy engine with connection pooling
