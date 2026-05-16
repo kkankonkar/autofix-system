@@ -73,6 +73,9 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_USER: ${{ github.event.comment.user.login }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
+          ANALYTICS_API_URL: ${{ secrets.ANALYTICS_API_URL }}
+          ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
+          ANALYTICS_ENABLED: 'true'
       
       - name: Upload review artifacts
         if: always()
@@ -136,6 +139,9 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_USER: ${{ github.event.comment.user.login }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
+          ANALYTICS_API_URL: ${{ secrets.ANALYTICS_API_URL }}
+          ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
+          ANALYTICS_ENABLED: 'true'
       
       - name: Upload analysis artifacts
         if: always()
@@ -144,6 +150,85 @@ jobs:
           name: fixium-docs-${{ github.event.issue.number }}
           path: |
             docs_analysis_pr${{ github.event.issue.number }}.json
+          retention-days: 30
+          if-no-files-found: ignore
+  
+  fixium-impact:
+    # Only run on issue comments (not PR) that contain "Fixium:analyzeimpact"
+    if: |
+      !github.event.issue.pull_request &&
+      contains(github.event.comment.body, 'Fixium:analyzeimpact')
+    
+    runs-on: ubuntu-latest
+    
+    # Prevent concurrent impact analysis on same issue
+    concurrency:
+      group: fixium-impact-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Bob CLI
+        run: |
+          curl -fsSL https://bob.ibm.com/download/bobshell.sh | bash
+          bob --version
+      
+      - name: Install Node.js for MCP
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Configure Bob MCP for Neo4j
+        run: |
+          bash scripts/configure_bob_mcp.sh
+        env:
+          NEO4J_URI: ${{ secrets.NEO4J_URI }}
+          NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
+      
+      - name: Run Impact Analysis
+        run: |
+          python -m fixium.impact_main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BOBSHELL_API_KEY: ${{ secrets.BOBSHELL_API_KEY }}
+          FIXIUM_AUTHORIZED_USERS: ${{ secrets.FIXIUM_AUTHORIZED_USERS }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_OWNER: ${{ github.repository_owner }}
+          GITHUB_REPO: ${{ github.event.repository.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          NEO4J_URI: ${{ secrets.NEO4J_URI }}
+          NEO4J_USERNAME: ${{ secrets.NEO4J_USERNAME }}
+          NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
+          NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
+          ANALYTICS_API_URL: ${{ secrets.ANALYTICS_API_URL }}
+          ANALYTICS_API_KEY: ${{ secrets.ANALYTICS_API_KEY }}
+          ANALYTICS_ENABLED: 'true'
+      
+      - name: Upload analysis artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixium-impact-${{ github.event.issue.number }}
+          path: |
+            impact_analysis_issue${{ github.event.issue.number }}.json
           retention-days: 30
           if-no-files-found: ignore
 

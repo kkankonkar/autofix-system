@@ -1,11 +1,12 @@
 """Execute documentation analysis workflow."""
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 import subprocess
 import json
 
 from .change_classifier import ChangeClassifier
 from .doc_discoverer import DocumentationDiscoverer
+from .cost_tracker import CostTracker, CostInfo
 
 
 class DocRunner:
@@ -30,14 +31,14 @@ class DocRunner:
         self.discoverer = DocumentationDiscoverer()
     
     def analyze_pr_docs(
-        self, 
+        self,
         pr_number: int,
         pr_files: list[str],
         commit_messages: list[str],
         pr_title: Optional[str],
         output_file: str,
         skip_classification: bool = False
-    ) -> Dict:
+    ) -> Tuple[Dict, CostInfo]:
         """
         Analyze PR for documentation gaps.
         
@@ -50,7 +51,7 @@ class DocRunner:
             skip_classification: Force analysis even for minor changes
             
         Returns:
-            Dictionary with analysis results
+            Tuple of (analysis results dict, cost_info)
             
         Raises:
             RuntimeError: If analysis fails
@@ -74,7 +75,7 @@ class DocRunner:
             print(f"  Should analyze docs: {classification['should_analyze_docs']}")
             
             if not classification['should_analyze_docs']:
-                # Return early - no analysis needed
+                # Return early - no analysis needed (no cost incurred)
                 return {
                     'prNumber': pr_number,
                     'changeClassification': {
@@ -89,14 +90,14 @@ class DocRunner:
                         'totalDocsDiscovered': doc_count,
                         'totalGaps': 0
                     }
-                }
+                }, CostInfo(operation="doc analysis (skipped)")
         else:
             print("  Skipping classification (forced analysis)")
             classification = None
         
         # Run documentation analysis via Bob AI
         print("  Running documentation gap analysis...")
-        success = self.run_doc_analysis(pr_number, output_file, docs, pr_files)
+        success, cost_info = self.run_doc_analysis(pr_number, output_file, docs, pr_files)
         
         if not success:
             raise RuntimeError("Documentation analysis failed")
@@ -109,15 +110,15 @@ class DocRunner:
         with open(output_path) as f:
             results = json.load(f)
         
-        return results
+        return results, cost_info
     
     def run_doc_analysis(
-        self, 
-        pr_number: int, 
+        self,
+        pr_number: int,
         output_file: str,
         discovered_docs: Dict,
         pr_files: list[str]
-    ) -> bool:
+    ) -> Tuple[bool, CostInfo]:
         """
         Execute Bob AI documentation analysis via shell script.
         
@@ -128,7 +129,7 @@ class DocRunner:
             pr_files: List of files changed in PR
             
         Returns:
-            True if successful
+            Tuple of (success, cost_info)
             
         Raises:
             TimeoutError: If analysis times out
@@ -155,7 +156,12 @@ class DocRunner:
                 timeout=1800,  # 30 minutes
                 check=True
             )
-            return True
+            
+            # Extract cost information from output
+            combined_output = result.stdout + result.stderr
+            cost_info = CostTracker.extract_costs(combined_output, "doc analysis")
+            
+            return True, cost_info
         except subprocess.TimeoutExpired:
             raise TimeoutError(f"Documentation analysis timed out after 1800s")
         except subprocess.CalledProcessError as e:

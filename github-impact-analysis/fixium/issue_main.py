@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import time
 from typing import Optional
 from github import Github
 
@@ -14,6 +15,9 @@ from .access_control import AccessControl
 
 def main():
     """Main entry point for issue implementation workflow."""
+    # Track start time for analytics
+    start_time = time.time()
+    
     # Get environment variables
     github_token = os.getenv('GITHUB_TOKEN')
     repo_name = os.getenv('GITHUB_REPOSITORY')
@@ -132,6 +136,11 @@ def main():
         print(f"   Files Changed: {len(changes.changes)}")
         print(f"   Tests Added: {len(changes.tests_added)}")
         print(f"   Validation: {changes.validation_status}")
+        
+        # Print cost information
+        if changes.cost_info and (changes.cost_info.coins_used > 0 or changes.cost_info.dollars_used > 0):
+            print(f"   💰 Cost: {changes.cost_info.coins_used:.2f} coins (${changes.cost_info.dollars_used:.4f})")
+        
         print()
         
         if changes.validation_status == 'failed':
@@ -197,6 +206,27 @@ def main():
         print(f"   URL: {pr.html_url}")
         print()
         
+        # Post analytics event (non-blocking)
+        try:
+            from .analytics_client import build_fix_event, post_analytics_event
+            
+            issue = github_client.get_issue(issue_number)
+            event_data = build_fix_event(
+                issue_info=issue,
+                pr_info=pr,
+                cost_info=changes.cost_info,
+                fix_data=changes.to_dict(),
+                metadata={
+                    'triggeredBy': 'issue_comment',
+                    'duration': int(time.time() - start_time),
+                    'status': 'success',
+                    'fixiumVersion': '1.0.0'
+                }
+            )
+            post_analytics_event(event_data)
+        except Exception as e:
+            print(f"⚠️  Analytics posting failed (non-critical): {e}")
+        
         # Update final comment
         validation_note = ""
         if changes.validation_status == 'failed':
@@ -206,6 +236,11 @@ def main():
                 "Please review and fix them before merging:\n\n"
                 + "\n".join(f"- {error}" for error in changes.validation_errors)
             )
+        
+        # Format cost information for comment
+        cost_section = ""
+        if changes.cost_info and (changes.cost_info.coins_used > 0 or changes.cost_info.dollars_used > 0):
+            cost_section = f"\n\n{changes.cost_info.format_for_comment()}"
         
         github_client.update_comment(
             comment_id,
@@ -218,7 +253,8 @@ def main():
             f"- Tests added: {len(changes.tests_added)}\n"
             f"- Branch: `{branch_name}`\n"
             f"- Validation: {changes.validation_status}"
-            f"{validation_note}\n\n"
+            f"{validation_note}"
+            f"{cost_section}\n\n"
             f"Please review the changes and provide feedback!"
         )
         

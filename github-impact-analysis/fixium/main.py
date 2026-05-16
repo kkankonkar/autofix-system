@@ -2,6 +2,7 @@
 import sys
 import os
 import json
+import time
 from pathlib import Path
 from typing import NoReturn
 
@@ -54,6 +55,9 @@ def exit_with_error(message: str, code: int = 1) -> NoReturn:
 def main() -> None:
     """Main Fixium workflow orchestrator."""
     print("🔍 Fixium Code Review Bot - Starting...")
+    
+    # Track start time for analytics
+    start_time = time.time()
     
     # Load configuration
     config = Config()
@@ -144,13 +148,18 @@ def main() -> None:
             error_handler.handle_unexpected_error(error_msg, progress)
             sys.exit(1)
         
+        # Initialize cost_info
+        cost_info = None
+        
         try:
-            review_runner.run_review(
-                config.pr_number, 
+            success, cost_info = review_runner.run_review(
+                config.pr_number,
                 output_file,
                 timeout=config.review_timeout
             )
             print(f"✓ Review completed, output: {output_file}")
+            if cost_info and (cost_info.coins_used > 0 or cost_info.dollars_used > 0):
+                print(f"  💰 Cost: {cost_info.coins_used:.2f} coins (${cost_info.dollars_used:.4f})")
         except TimeoutError as e:
             print(f"✗ Review timeout: {e}")
             error_handler.handle_timeout(progress)
@@ -205,9 +214,41 @@ def main() -> None:
         print(f"✓ Review summary: {total_findings} findings")
         print(f"  {summary}")
         
-        # Complete
+        # Complete progress (without cost in main summary)
         progress.complete(total_findings, summary)
+        
+        # Post separate cost comment if available
+        if cost_info and (cost_info.coins_used > 0 or cost_info.dollars_used > 0):
+            cost_comment = f"""## 💰 Review Cost Summary
+
+{cost_info.format_for_comment()}
+
+---
+*🤖 Fixium Code Review Bot*"""
+            github_client.post_comment(config.pr_number, cost_comment)
+            print("✓ Cost summary posted")
+        
         print("✅ Fixium review completed successfully!")
+        
+        # Post analytics event (non-blocking)
+        try:
+            from .analytics_client import build_review_event, post_analytics_event
+            
+            pr_info = github_client.get_pull_request(config.pr_number)
+            event_data = build_review_event(
+                pr_info=pr_info,
+                cost_info=cost_info,
+                review_data=review_data,
+                metadata={
+                    'triggeredBy': 'pull_request',
+                    'duration': int(time.time() - start_time),
+                    'status': 'success',
+                    'fixiumVersion': '1.0.0'
+                }
+            )
+            post_analytics_event(event_data)
+        except Exception as e:
+            print(f"⚠️  Analytics posting failed (non-critical): {e}")
         
     except KeyboardInterrupt:
         print("\n✗ Review interrupted by user")

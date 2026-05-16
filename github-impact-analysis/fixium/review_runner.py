@@ -1,8 +1,10 @@
 """Review runner - wrapper for Bob Shell execution."""
 import subprocess
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from pathlib import Path
+
+from .cost_tracker import CostTracker, CostInfo
 
 
 class ReviewRunner:
@@ -18,11 +20,11 @@ class ReviewRunner:
         self.workspace_dir = workspace_dir or os.getcwd()
     
     def run_review(
-        self, 
-        pr_number: int, 
+        self,
+        pr_number: int,
         output_file: str,
         timeout: int = 1800  # 30 minutes default
-    ) -> bool:
+    ) -> Tuple[bool, CostInfo]:
         """
         Run code review using review_workflow.sh.
         
@@ -32,7 +34,7 @@ class ReviewRunner:
             timeout: Timeout in seconds
             
         Returns:
-            True if successful
+            Tuple of (success, cost_info)
             
         Raises:
             TimeoutError: If review times out
@@ -56,15 +58,27 @@ class ReviewRunner:
         work_dir = os.getenv('GITHUB_WORKSPACE') or self.workspace_dir
         
         try:
-            # Don't capture output so user can see Bob's progress
+            # Capture output to extract cost information
             result = subprocess.run(
                 cmd,
                 cwd=work_dir,  # Run in repo directory, not script directory
-                capture_output=False,  # Show output in real-time
+                capture_output=True,  # Capture to extract costs
+                text=True,
                 timeout=timeout,
                 check=True
             )
-            return True
+            
+            # Extract cost information from output
+            combined_output = result.stdout + result.stderr
+            cost_info = CostTracker.extract_costs(combined_output, "code review")
+            
+            # Print output for visibility
+            if result.stdout:
+                print(result.stdout)
+            if result.stderr:
+                print(result.stderr, file=__import__('sys').stderr)
+            
+            return True, cost_info
         except subprocess.TimeoutExpired:
             raise TimeoutError(f"Review timed out after {timeout}s")
         except subprocess.CalledProcessError as e:

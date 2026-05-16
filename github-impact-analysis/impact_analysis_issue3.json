@@ -1,0 +1,164 @@
+{
+  "issueNumber": 3,
+  "issueTitle": "Upsate Producer design specs to use new field key values for message",
+  "affectedComponents": [],
+  "impactAnalysis": {
+    "directDependencies": [
+      {
+        "path": "services/producer/src/kafka/producer.ts",
+        "type": "module",
+        "relationship": "IMPORTS",
+        "description": "Kafka producer module imported by main API server",
+        "depth": 1
+      },
+      {
+        "path": "services/producer/src/database/service.ts",
+        "type": "module",
+        "relationship": "IMPORTS",
+        "description": "Database service module with device_id operations",
+        "depth": 1
+      },
+      {
+        "path": "services/producer/src/database/init.ts",
+        "type": "module",
+        "relationship": "IMPORTS",
+        "description": "Database initialization with schema definition",
+        "depth": 1
+      }
+    ],
+    "downstreamImpact": [
+      {
+        "path": "services/consumer/consumer/billing_consumer.py",
+        "type": "service",
+        "relationship": "CONSUMES_FROM",
+        "description": "Python billing consumer reads device_id from Kafka messages",
+        "depth": 1
+      },
+      {
+        "path": "",
+        "type": "infrastructure",
+        "relationship": "MESSAGE_SCHEMA",
+        "description": "Kafka topic with messages containing device_id",
+        "depth": 1
+      },
+      {
+        "path": "",
+        "type": "datastore",
+        "relationship": "SCHEMA",
+        "description": "Database with device_id column and indexes",
+        "depth": 1
+      }
+    ],
+    "testCoverage": [
+      {
+        "path": "services/producer/TESTING.md",
+        "status": "exists",
+        "needs_update": true
+      },
+      {
+        "path": "tests/unit/test_device_id_validation.ts",
+        "status": "missing",
+        "needs_update": false
+      },
+      {
+        "path": "tests/integration/test_kafka_messages.ts",
+        "status": "missing",
+        "needs_update": false
+      }
+    ],
+    "apiEndpoints": [
+      {
+        "endpoint": "POST /mobile-usage",
+        "method": "POST",
+        "status": "breaking_change",
+        "breaking": true
+      },
+      {
+        "endpoint": "GET /mobile-usage",
+        "method": "GET",
+        "status": "breaking_change",
+        "breaking": true
+      },
+      {
+        "endpoint": "GET /mobile-usage/device/:device_id",
+        "method": "GET",
+        "status": "breaking_change",
+        "breaking": true
+      }
+    ],
+    "databaseImpact": [
+      {
+        "table": "mobile_usage",
+        "operation": "schema_change",
+        "schema_change": true
+      }
+    ]
+  },
+  "riskAssessment": {
+    "score": 0.7,
+    "level": "high",
+    "factors": [
+      {
+        "factor": "Few downstream dependencies",
+        "impact": "low",
+        "weight": 0.1
+      },
+      {
+        "factor": "Tests need updates",
+        "impact": "medium",
+        "weight": 0.15
+      },
+      {
+        "factor": "Breaking API changes",
+        "impact": "high",
+        "weight": 0.25
+      },
+      {
+        "factor": "Database schema changes",
+        "impact": "high",
+        "weight": 0.2
+      }
+    ]
+  },
+  "recommendations": [
+    {
+      "priority": "high",
+      "category": "testing",
+      "action": "Add or update test coverage",
+      "rationale": "Changes require comprehensive testing to prevent regressions"
+    },
+    {
+      "priority": "high",
+      "category": "documentation",
+      "action": "Update API documentation",
+      "rationale": "Breaking changes require documentation updates"
+    },
+    {
+      "priority": "high",
+      "category": "database",
+      "action": "Create database migration scripts",
+      "rationale": "Schema changes require careful migration planning"
+    },
+    {
+      "priority": "medium",
+      "category": "testing",
+      "action": "Add integration tests",
+      "rationale": "Complex changes benefit from end-to-end testing"
+    }
+  ],
+  "summary": {
+    "totalDirectDependencies": 3,
+    "totalDownstreamImpact": 3,
+    "testCoverageStatus": "partial",
+    "apiChanges": 3,
+    "databaseChanges": 1,
+    "estimatedEffort": "high",
+    "recommendedApproach": "Implement with feature flag, comprehensive testing, and staged rollout"
+  },
+  "neo4jQueries": [],
+  "costInfo": {
+    "coins_used": 0.0,
+    "dollars_used": 0.0,
+    "operation": "impact analysis"
+  }
+}

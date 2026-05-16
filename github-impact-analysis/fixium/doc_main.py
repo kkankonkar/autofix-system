@@ -1,6 +1,7 @@
 """Main entry point for Fixium documentation analysis."""
 import sys
 import json
+import time
 from pathlib import Path
 from typing import NoReturn
 from datetime import datetime
@@ -116,6 +117,9 @@ def main() -> None:
     """Documentation analysis workflow orchestrator."""
     print("📚 Fixium Documentation Analyzer - Starting...")
     
+    # Track start time for analytics
+    start_time = time.time()
+    
     # Load configuration
     config = Config()
     
@@ -204,7 +208,7 @@ def main() -> None:
             sys.exit(1)
         
         try:
-            results = doc_runner.analyze_pr_docs(
+            results, cost_info = doc_runner.analyze_pr_docs(
                 pr_number=config.pr_number,
                 pr_files=pr_files,
                 commit_messages=commit_messages,
@@ -213,6 +217,8 @@ def main() -> None:
                 skip_classification=command.doc_options.skip_classification
             )
             print(f"✓ Analysis completed")
+            if cost_info.coins_used > 0 or cost_info.dollars_used > 0:
+                print(f"  💰 Cost: {cost_info.coins_used:.2f} coins (${cost_info.dollars_used:.4f})")
         except TimeoutError as e:
             print(f"✗ Analysis timeout: {e}")
             error_handler.handle_timeout(progress)
@@ -238,7 +244,13 @@ def main() -> None:
         print("Posting results to PR...")
         progress.update("Posting results...", "Formatting and submitting comment")
         
+        # Add cost info to results
         comment = format_doc_suggestions(results)
+        
+        # Append cost information if available
+        if 'cost_info' in locals() and (cost_info.coins_used > 0 or cost_info.dollars_used > 0):
+            comment += f"\n\n{cost_info.format_for_comment()}"
+        
         github_client.post_comment(config.pr_number, comment)
         print("✓ Results posted to PR")
         
@@ -248,8 +260,32 @@ def main() -> None:
         else:
             summary = "No documentation updates needed (minor changes)"
         
+        # Add cost to summary
+        if 'cost_info' in locals() and (cost_info.coins_used > 0 or cost_info.dollars_used > 0):
+            summary += f"\n\n{cost_info.format_for_comment()}"
+        
         progress.complete(total_gaps, summary)
         print("✅ Fixium documentation analysis completed successfully!")
+        
+        # Post analytics event (non-blocking)
+        try:
+            from .analytics_client import build_docs_event, post_analytics_event
+            
+            pr_info = github_client.get_pull_request(config.pr_number)
+            event_data = build_docs_event(
+                pr_info=pr_info,
+                cost_info=cost_info,
+                docs_data=results,
+                metadata={
+                    'triggeredBy': 'pull_request',
+                    'duration': int(time.time() - start_time),
+                    'status': 'success',
+                    'fixiumVersion': '1.0.0'
+                }
+            )
+            post_analytics_event(event_data)
+        except Exception as e:
+            print(f"⚠️  Analytics posting failed (non-critical): {e}")
         
     except KeyboardInterrupt:
         print("\n✗ Analysis interrupted by user")

@@ -27,6 +27,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
 RUN curl -fsSL https://bob.ibm.com/download/bobshell.sh | bash && \
     bob --version
 
+# Note: Neo4j MCP server will be installed on-demand via npx
+# The MCP configuration uses: npx -y @modelcontextprotocol/server-neo4j
+# This auto-installs the package when first used
+
 # Set working directory
 WORKDIR /fixium
 
@@ -40,13 +44,14 @@ COPY fixium/ ./fixium/
 COPY tests/ ./tests/
 COPY lib/ ./lib/
 COPY prompts/ ./prompts/
+COPY scripts/ ./scripts/
 # COPY config/ ./config/
 COPY review_workflow.sh .
 COPY submit_pr_comments.sh .
 COPY pytest.ini .
 
 # Make shell scripts executable
-RUN chmod +x /fixium/*.sh /fixium/lib/*.sh
+RUN chmod +x /fixium/*.sh /fixium/lib/*.sh /fixium/scripts/*.sh
 
 # Configure Git for container usage
 # This fixes "dubious ownership" and "Author identity unknown" errors

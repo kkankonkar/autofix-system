@@ -65,7 +65,7 @@ class FixiumCommand:
     
     def is_valid(self) -> bool:
         """Check if command is valid."""
-        return self.command in ['review', 'updatedocs', 'implementfix']
+        return self.command in ['review', 'updatedocs', 'implementfix', 'analyzeimpact']
 
 
 class CommentParser:

@@ -1,11 +1,13 @@
 """Generate code changes based on issue analysis."""
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 import subprocess
 import json
 import tempfile
 import os
+
+from .cost_tracker import CostTracker, CostInfo
 
 
 @dataclass
@@ -29,6 +31,12 @@ class CodeChanges:
     validation_status: str  # passed, failed, skipped
     validation_errors: List[str]
     implementation_notes: str = ""
+    cost_info: CostInfo = None
+    
+    def __post_init__(self):
+        """Initialize cost_info if not provided."""
+        if self.cost_info is None:
+            self.cost_info = CostInfo(operation="code generation")
     
     def to_dict(self) -> Dict:
         """Convert to dictionary."""
@@ -49,7 +57,8 @@ class CodeChanges:
             'testsAdded': self.tests_added,
             'validationStatus': self.validation_status,
             'validationErrors': self.validation_errors,
-            'implementationNotes': self.implementation_notes
+            'implementationNotes': self.implementation_notes,
+            'costInfo': self.cost_info.to_dict() if self.cost_info else {}
         }
 
 
@@ -181,6 +190,10 @@ Now implement the changes using your tools (read_file, write_to_file, apply_diff
                 timeout=1800  # 30 minutes
             )
             
+            # Extract cost information from output
+            combined_output = result.stdout + result.stderr
+            cost_info = CostTracker.extract_costs(combined_output, "code generation")
+            
             if result.returncode != 0:
                 raise RuntimeError(f"Bob AI failed: {result.stderr}")
             
@@ -278,7 +291,8 @@ Now implement the changes using your tools (read_file, write_to_file, apply_diff
                 tests_added=[c.file_path for c in changes if 'test' in c.file_path.lower()],
                 validation_status='pending',
                 validation_errors=[],
-                implementation_notes=f"Bob AI implemented {len(changes)} file changes"
+                implementation_notes=f"Bob AI implemented {len(changes)} file changes",
+                cost_info=cost_info
             )
             
             # Validate changes

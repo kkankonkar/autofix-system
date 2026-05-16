@@ -18,6 +18,14 @@ Fixium is an automated code review system that integrates Bob AI (IBM's AI assis
 - **Selective Analysis**: Skip minor changes (bug fixes, dependency updates, security patches)
 - **Force Mode**: Override automatic detection when needed
 
+### 🔍 Impact Analysis (`Fixium:analyzeimpact`)
+- **Graph-Based Analysis**: Uses Neo4j to analyze code dependencies and relationships
+- **Risk Assessment**: Calculates impact risk score based on multiple factors
+- **Comprehensive Coverage**: Identifies affected files, tests, APIs, and database schemas
+- **Downstream Impact**: Traces dependencies up to 3 levels deep
+- **Actionable Recommendations**: Provides prioritized action items based on risk
+- **MCP Integration**: Leverages Model Context Protocol for Neo4j queries
+
 ## Quick Start
 
 ### Prerequisites
@@ -77,6 +85,50 @@ Fixium:updatedocs
 - `Fixium:updatedocs --force` - Analyze even if classified as minor change
 - `Fixium:updatedocs --files README.md,docs/API.md` - Analyze specific files only
 
+#### Impact Analysis
+
+Comment on an **issue** (not PR) with:
+```
+Fixium:analyzeimpact
+```
+
+**What it does:**
+- Analyzes the downstream impact of changes described in the issue
+- Queries Neo4j graph database for code dependencies
+- Identifies affected files, tests, APIs, and database schemas
+- Calculates risk score and provides recommendations
+
+**Requirements:**
+- Neo4j Aura instance with code graph data
+- GitHub repository secrets configured (NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+- Bob CLI with MCP support
+
+**Example Output:**
+```markdown
+## 🔍 Impact Analysis Results
+
+**Issue**: #123 - Add payment refund functionality
+
+### 📊 Summary
+- **Risk Score**: 0.65 (Medium-High)
+- **Direct Dependencies**: 5 files
+- **Indirect Dependencies**: 12 files
+- **Test Coverage**: Partial
+- **API Changes**: 1 endpoint
+
+### 🎯 Affected Components
+- 🎯 `src/payment/processor.py` - PaymentProcessor
+- 🎯 `src/api/payment_routes.py` - PaymentRoutes
+
+### ⚠️ Recommendations
+**High Priority:**
+- 🔴 **Add integration tests for refund flow**
+- 🔴 **Document new refund API endpoint**
+
+**Medium Priority:**
+- 🟡 **Review downstream services for compatibility**
+```
+
 **Example Output:**
 ```json
 {
@@ -110,9 +162,11 @@ Fixium:updatedocs
 fixium/
 ├── main.py                 # Code review entry point
 ├── doc_main.py            # Documentation analysis entry point
+├── impact_main.py         # Impact analysis entry point
 ├── github_client.py       # GitHub API client
 ├── review_runner.py       # Code review orchestration
 ├── doc_runner.py          # Documentation analysis orchestration
+├── impact_analyzer.py     # Impact analysis with Neo4j
 ├── doc_discoverer.py      # Documentation file discovery
 ├── change_classifier.py   # PR change classification
 ├── comment_parser.py      # Command parsing

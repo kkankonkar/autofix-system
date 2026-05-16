@@ -18,10 +18,17 @@ class Config:
         self.bob_api_key = os.getenv('BOBSHELL_API_KEY')
         self.authorized_users = os.getenv('FIXIUM_AUTHORIZED_USERS', '')
         
-        # PR context
+        # PR/Issue context
         self.pr_number = self._get_int_env('PR_NUMBER')
+        self.issue_number = self._get_int_env('ISSUE_NUMBER')
         self.comment_body = os.getenv('COMMENT_BODY')
         self.comment_user = os.getenv('COMMENT_USER')
+        
+        # Neo4j configuration (for impact analysis)
+        self.neo4j_uri = os.getenv('NEO4J_URI')
+        self.neo4j_username = os.getenv('NEO4J_USERNAME')
+        self.neo4j_password = os.getenv('NEO4J_PASSWORD')
+        self.neo4j_database = os.getenv('NEO4J_DATABASE', 'neo4j')
         
         # Operational settings
         self.max_comments_per_batch = self._get_int_env('MAX_COMMENTS_PER_BATCH', 30)
@@ -65,6 +72,26 @@ class Config:
         
         if not self.comment_user:
             errors.append("COMMENT_USER is required")
+        
+        return errors
+    
+    def validate_neo4j(self) -> list[str]:
+        """
+        Validate Neo4j configuration.
+        
+        Returns:
+            List of error messages (empty if valid)
+        """
+        errors = []
+        
+        if not self.neo4j_uri:
+            errors.append("NEO4J_URI is required for impact analysis")
+        
+        if not self.neo4j_username:
+            errors.append("NEO4J_USERNAME is required for impact analysis")
+        
+        if not self.neo4j_password:
+            errors.append("NEO4J_PASSWORD is required for impact analysis")
         
         return errors
     
